@@ -25,7 +25,4 @@ Run `julia fetch_english_football_data.jl --help` for more in-depth information 
 ## TODO
 
 * Improve CSV cache to automatically remove csv files that do not match the year span, league span, etc
-* Update collect_lineup_pages to reflect the improvements made to the rest of the program.
-    * Project setting
-    * html script removal
-    * ArgParse cmd args
+* remove collect_lineup_pages.jl and make its functionality part of the main script using ArgParse commands
