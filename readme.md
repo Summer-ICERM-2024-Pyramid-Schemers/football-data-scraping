@@ -9,11 +9,12 @@ EFL-data-scraping is a project to scrape, clean, and compile data relating to th
 
 1. To run this project, you need a recent version of Julia, preferably 1.10+
 2. Clone this repository and cd into the folder
-3. Open a Julia REPL in the current folder
-4. Run the following:
-`]activate .`
-`instantiate`
-5. If you wish to use an existing snapshot of the webpages instead of downloading them, extract a snapshot from the "rawdata_snapshots/" folder into a folder named "rawdata/".
+3. Open a Julia REPL in the current folder and run the following:
+```
+]activate .
+instantiate
+```
+4. If you wish to use an existing snapshot of the webpages instead of downloading them, extract a snapshot from the "rawdata_snapshots/" folder into a folder named "rawdata/".
 
 ## Usage
 
