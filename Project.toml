@@ -1,0 +1,13 @@
+[deps]
+ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Cascadia = "54eefc05-d75b-58de-a785-1a3403f0919f"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+Gumbo = "708ec375-b3d6-5a57-a7ce-8257bf98657a"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+InlineStrings = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+MD5 = "6ac74813-4b46-53a4-afec-0b5dc9d7885c"
+SQLite = "0aa819cd-b072-5ff4-a722-6bc24af294d9"
+StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"

@@ -1,0 +1,4 @@
+rawdata
+csv_files
+*.sqlite
+Manifest.toml
