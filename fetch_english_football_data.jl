@@ -176,7 +176,7 @@ function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool
 	baseurl = "https://www.transfermarkt.com/{LEAGUE}/gesamtspielplan/wettbewerb/GB{NUM}/saison_id/{SEASON}"
 
 	df = DataFrame(transfermarkt_team_id=Int[],team_name=String31[],date=String15[],starters_num_foreigners=Int[],starters_avg_age=Float64[],starters_purchase_val=String15[],
-		starters_total_market_val=String15[],bench_num_foreigners=Int[],bench_avg_age=Float64[],bench_purchase_val=String15[],bench_total_market_val=String15[])
+		starters_total_market_val=String15[],bench_num_foreigners=Int[],bench_avg_age=Float64[],bench_purchase_val=String15[],bench_total_market_val=String15[],bench_size=Int[])
 	allowmissing!(df,r"starters|bench")
 	
 	for season = SCRAPE_YEAR_RANGE
@@ -209,6 +209,9 @@ function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool
 						total_market_val = replace(total_market_cell[1].text,"Total MV: "=>"")
 						temp[i] = [foreigners,avg_age,purchase_val,total_market_val]
 					end
+					if i in (3,4)
+						push!(temp[i],tr === nothing ? missing : length(eachmatch(sel"div.responsive-table > table > tbody > tr",div)))
+					end
 				end
 				
 				for (i,team_link) in enumerate(team_links)
@@ -239,8 +242,8 @@ function clean_lineup_data!(df::DataFrame)
 	df[(df.date .== typeof(df[1,:date])("2024-01-06")) .&& ((df.team_name .== "Gillingham") .|| (df.team_name .== "Stockport County")),:date] = (df[1,:date] isa Date) ? [Date(2024,2,20),Date(2024,2,20)] : ["2024-02-20","2024-02-20"]
 	
 	# Fix the missing data in the Southend vs Stevenage
-	df[(df.date .== typeof(df[1,:date])("2021-03-13")) .&& (df.team_name .== "Southend United"),Between(:starters_num_foreigners,:bench_total_market_val)] = [7 25.4 0 750000.0 1 25.0 0 0.0]
-	df[(df.date .== typeof(df[1,:date])("2021-03-13")) .&& (df.team_name .== "Stevenage"),Between(:starters_num_foreigners,:bench_total_market_val)] = [4 26.5 0 1200000.0 1 25.9 0 500000.0]
+	df[(df.date .== typeof(df[1,:date])("2021-03-13")) .&& (df.team_name .== "Southend United"),Between(:starters_num_foreigners,:bench_size)] = [7 25.4 0 750000.0 1 25.0 0 0.0 7]
+	df[(df.date .== typeof(df[1,:date])("2021-03-13")) .&& (df.team_name .== "Stevenage"),Between(:starters_num_foreigners,:bench_size)] = [4 26.5 0 1200000.0 1 25.9 0 500000.0 7]
 
 	rows_to_delete = findall((df.date .== typeof(df[1,:date])("2019-04-27")) .&& ((df.team_name .== "Bolton Wanderers") .|| (df.team_name .== "Brentford")))
 	@assert length(rows_to_delete)==2
@@ -308,9 +311,6 @@ end
 # Standings data functions
 
 function scrape_standings_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true)::DataFrame
-	println(SCRAPE_DELAY_RANGE)
-	println(SCRAPE_YEAR_RANGE)
-
 	@info "Scraping standings data"
 	baseurl = "https://www.espn.com/soccer/standings/_/league/ENG.{NUM}/season/{YEAR}"
 	df = DataFrame(season=Int[],league=String15[],league_num=Int[],ranking=Int[],espn_team_id=Int[],team_name=String31[],games_played=Int[],wins=Int[],draws=Int[],losses=Int[],goals_for=Int[],goals_against=Int[],goal_diff=Int[],points=Int[])
