@@ -38,7 +38,7 @@ function get_raw_data_from(url::String; check_web_cache::Bool=true, enable_web_c
 	path = joinpath("rawdata",bytes2hex(md5(url)))
 	@debug "getting $(url), locally should be $(path)"
 	if !isfile(path) || !check_web_cache
-		error("testing says no")
+		@debug "fetching from web"
 		response = HTTP.get(url,headers=HTTP_REQUEST_HEADERS)
 		if response.status != 200
 			throw(response)
