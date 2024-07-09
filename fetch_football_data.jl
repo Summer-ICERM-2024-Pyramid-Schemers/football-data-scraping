@@ -18,7 +18,13 @@ if !isdir("csv_files")
 end
 
 const HTTP_REQUEST_HEADERS::Dict{String,String} = Dict("User-Agent"=>"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
-const LEAGUES::Vector{String15} = ["premier-league","championship","league-one","league-two"]
+# Order is league_num, league_name, tmkt_league_id, fdcu_league_id, espn_league_id
+const LEAGUES::Matrix{Any} = [1 "premier-league" "GB1" "E0" "ENG.1";
+								2 "championship" "GB2" "E1" "ENG.2";
+								3 "league-one" "GB3" "E2" "ENG.3";
+								4 "league-two" "GB4" "E3" "ENG.4";
+								5 "bundesliga" "L1" "D1" "GER.1";
+								6 "2-bundesliga" "L2" "D2" "GER.2"]
 const MATCH_HEADERS_MAPPING::OrderedDict{Symbol,Symbol} = OrderedDict(:Date=>:date,:HomeTeam=>:HomeTeam,:AwayTeam=>:AwayTeam,:FTHG=>:fulltime_home_goals,
 	:FTAG=>:fulltime_away_goals,:FTR=>:fulltime_result,:HTHG=>:halftime_home_goals,:HTAG=>:halftime_away_goals,:HTR=>:halftime_result,:HS=>:home_shots,
 	:AS=>:away_shots,:HST=>:home_shots_on_target,:AST=>:away_shots_on_target,:HC=>:home_corners,:AC=>:away_corners,:HF=>:home_fouls,:AF=>:away_fouls,
@@ -32,6 +38,7 @@ function get_raw_data_from(url::String; check_web_cache::Bool=true, enable_web_c
 	path = joinpath("rawdata",bytes2hex(md5(url)))
 	@debug "getting $(url), locally should be $(path)"
 	if !isfile(path) || !check_web_cache
+		error("testing says no")
 		response = HTTP.get(url,headers=HTTP_REQUEST_HEADERS)
 		if response.status != 200
 			throw(response)
@@ -136,17 +143,20 @@ function parse_market_val(str::AbstractString)::Float64
 end
 parse_market_val(::Missing)::Missing = missing
 
-function scrape_team_marketvalue_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true)::DataFrame
+function scrape_team_marketvalue_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true, download_only::Bool=false)::DataFrame
 	@info "Scraping team marketvalue data"
-	baseurl = "https://www.transfermarkt.us/{LEAGUE}/startseite/wettbewerb/GB{NUM}/plus/?saison_id={SEASON}"
+	baseurl = "https://www.transfermarkt.us/{LEAGUE}/startseite/wettbewerb/{LEAGUE_ID}/plus/?saison_id={SEASON}"
 
-	df = DataFrame(season=Int[],league=String15[],league_num=Int[],transfermarkt_team_id=Int[],team_name=String31[],squad_size=Int[],avg_age=Float64[],num_foreigners=Int[],avg_market_val=String15[],total_market_val=String15[])
+	df = DataFrame(season=Int[],league_name=String15[],league_num=Int[],transfermarkt_team_id=Int[],team_name=String31[],squad_size=Int[],avg_age=Float64[],num_foreigners=Int[],avg_market_val=String15[],total_market_val=String15[])
 	
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for (num,league) in enumerate(LEAGUES)
-			url = replace(baseurl,"{NUM}"=>num,"{LEAGUE}"=>league,"{SEASON}"=>season)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
+			url = replace(baseurl,"{LEAGUE_ID}"=>tmkt_league_id,"{LEAGUE}"=>league_name,"{SEASON}"=>season)
 			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
+			if download_only
+				continue
+			end
 			htmldata = parsehtml(data)
 			
 			for row in eachmatch(sel"div#yw1 table.items tbody tr",htmldata.root)
@@ -158,7 +168,7 @@ function scrape_team_marketvalue_data(; check_web_cache::Bool=true, enable_web_c
 				foreigners = parse(Int,foreigners_cell[1].text)
 				avg_market_val = avg_market_cell[1].text
 				total_market_val = total_market_cell[1][1].text
-				push!(df,[season,league,num,team_id,team_name,squad_size,avg_age,foreigners,avg_market_val,total_market_val])
+				push!(df,[season,league_name,league_num,team_id,team_name,squad_size,avg_age,foreigners,avg_market_val,total_market_val])
 			end
 		end
 	end
@@ -171,9 +181,9 @@ function clean_team_marketvalue_data!(df::DataFrame)
 	assert_zero_missing_values(df)
 end
 
-function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true)::DataFrame
+function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true, download_only::Bool=false)::DataFrame
 	@info "Scraping lineup data"
-	baseurl = "https://www.transfermarkt.com/{LEAGUE}/gesamtspielplan/wettbewerb/GB{NUM}/saison_id/{SEASON}"
+	baseurl = "https://www.transfermarkt.com/{LEAGUE}/gesamtspielplan/wettbewerb/{LEAGUE_ID}/saison_id/{SEASON}"
 
 	df = DataFrame(transfermarkt_team_id=Int[],team_name=String31[],date=String15[],starters_num_foreigners=Int[],starters_avg_age=Float64[],starters_purchase_val=String15[],
 		starters_total_market_val=String15[],bench_num_foreigners=Int[],bench_avg_age=Float64[],bench_purchase_val=String15[],bench_total_market_val=String15[],bench_size=Int[])
@@ -181,8 +191,8 @@ function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool
 	
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for (num,league) in enumerate(LEAGUES)
-			url = replace(baseurl,"{NUM}"=>num,"{LEAGUE}"=>league,"{SEASON}"=>season)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
+			url = replace(baseurl,"{LEAGUE_ID}"=>tmkt_league_id,"{LEAGUE}"=>league_name,"{SEASON}"=>season)
 			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
 			htmldata = parsehtml(data)
 			
@@ -192,6 +202,9 @@ function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool
 					lineupurl = "https://www.transfermarkt.com/"*lstrip(lineupurl,'/')
 				end
 				lineuppage = get_raw_data_from(lineupurl, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
+				if download_only
+					continue
+				end
 				lineuphtml = parsehtml(lineuppage)
 				date_str = splitdir(getattr(Cascadia.matchFirst(sel"p.sb-datum > a:nth-of-type(2)",lineuphtml.root),"href"))[2]
 
@@ -254,25 +267,28 @@ end
 
 # Match data functions
 
-function scrape_match_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true)::DataFrame
+function scrape_match_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true, download_only::Bool=false)::DataFrame
 	@info "Scraping match data"
-	baseurl = "https://www.football-data.co.uk/mmz4281/{SEASON}/E{NUM}.csv"
+	baseurl = "https://www.football-data.co.uk/mmz4281/{SEASON}/{LEAGUE_ID}.csv"
 	include_columns = collect(keys(MATCH_HEADERS_MAPPING))
 	first_dump = true
 	result_df = nothing
 
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for i = 0:3
-			url = replace(baseurl,"{SEASON}"=>string(season%100,pad=2)*string((season+1)%100,pad=2),"{NUM}"=>i)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
+			url = replace(baseurl,"{SEASON}"=>string(season%100,pad=2)*string((season+1)%100,pad=2),"{LEAGUE_ID}"=>fdcu_league_id)
 			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
+			if download_only
+				continue
+			end
 			raw_df = CSV.read(IOBuffer(data),DataFrame)
 			if :BbAvH in propertynames(raw_df)
 				rename!(raw_df,:BbAvH=>:AvgH,:BbAvD=>:AvgD,:BbAvA=>:AvgA)
 			end
 			selected_df = select(raw_df,include_columns,copycols=false)
 			dropmissing!(selected_df,[:HomeTeam,:AwayTeam])
-			insertcols!(selected_df,1,:season=>season,:league=>LEAGUES[i+1],:league_num=>i+1)
+			insertcols!(selected_df,1,:season=>season,:league_name=>league_name,:league_num=>league_num)
 			
 			if first_dump
 				result_df = selected_df
@@ -281,6 +297,9 @@ function scrape_match_data(; check_web_cache::Bool=true, enable_web_cache::Bool=
 				append!(result_df,selected_df,promote=true)
 			end
 		end
+	end
+	if result_df === nothing
+		result_df = DataFrame()
 	end
 
 	return result_df
@@ -310,16 +329,19 @@ end
 
 # Standings data functions
 
-function scrape_standings_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true)::DataFrame
+function scrape_standings_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true, download_only::Bool=false)::DataFrame
 	@info "Scraping standings data"
-	baseurl = "https://www.espn.com/soccer/standings/_/league/ENG.{NUM}/season/{YEAR}"
-	df = DataFrame(season=Int[],league=String15[],league_num=Int[],ranking=Int[],espn_team_id=Int[],team_name=String31[],games_played=Int[],wins=Int[],draws=Int[],losses=Int[],goals_for=Int[],goals_against=Int[],goal_diff=Int[],points=Int[])
+	baseurl = "https://www.espn.com/soccer/standings/_/league/{LEAGUE_ID}/season/{YEAR}"
+	df = DataFrame(season=Int[],league_name=String15[],league_num=Int[],ranking=Int[],espn_team_id=Int[],team_name=String31[],games_played=Int[],wins=Int[],draws=Int[],losses=Int[],goals_for=Int[],goals_against=Int[],goal_diff=Int[],points=Int[])
 
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for (num,league) in enumerate(LEAGUES)
-			url = replace(baseurl,"{NUM}"=>num,"{YEAR}"=>season)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
+			url = replace(baseurl,"{LEAGUE_ID}"=>espn_league_id,"{YEAR}"=>season)
 			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
+			if download_only
+				continue
+			end
 			htmldata = parsehtml(data)
 			
 			temp = Tuple{Int,String,Int}[]
@@ -332,7 +354,7 @@ function scrape_standings_data(; check_web_cache::Bool=true, enable_web_cache::B
 				idx = parse(Int,getattr(row,"data-idx"))
 				gp,w,d,l,f,a,gd,p = map(span->parse(Int,span[1].text),eachmatch(sel"span",row))
 				ranking,team_name,espn_team_id = temp[idx+1]
-				push!(df,[season,league,num,ranking,espn_team_id,team_name,gp,w,d,l,f,a,gd,p])
+				push!(df,[season,league_name,league_num,ranking,espn_team_id,team_name,gp,w,d,l,f,a,gd,p])
 			end
 		end
 	end
@@ -350,7 +372,7 @@ end
 
 function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, match_data, standings_data; csv_preview::Bool=false)
 	# Create the league table (essentially an enum)
-	league_table = DataFrame(id=collect(1:4),name=LEAGUES)
+	league_table = DataFrame(LEAGUES,[:id,:league_name,:tmkt_league_id,:fdcu_league_id,:espn_league_id])
 
 	# Create the team table from the team marketvalue data
 	team_table = outerjoin(unique!(select(team_marketvalue_data,[:team_name,:transfermarkt_team_id])),unique!(select(standings_data,[:team_name,:espn_team_id])),on=:team_name,validate=true=>true)
@@ -359,15 +381,15 @@ function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, m
 
 	# Create the team marketvalue table from the data
 	team_name_to_id_dict = Dict([r.name=>r.id for r in eachrow(team_table)])
-	team_marketvalue_table = select(team_marketvalue_data,:season,:league_num=>:league_id,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:season,:league,:league_num,:transfermarkt_team_id,:team_name]))
+	team_marketvalue_table = select(team_marketvalue_data,:season,:league_num=>:league_id,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:season,:league_name,:league_num,:transfermarkt_team_id,:team_name]))
 
 	# Create the match table from the data
 	match_table = select(match_data,:season,:league_num=>:league_id,:HomeTeam=>ByRow(k->team_name_to_id_dict[k])=>:home_team_id,:AwayTeam=>ByRow(k->team_name_to_id_dict[k])=>:away_team_id,
-		:date=>ByRow(d->d isa Date ? date_obj_to_str(d) : d)=>:date,Not([:season,:league,:league_num,:date,:HomeTeam,:AwayTeam]))
+		:date=>ByRow(d->d isa Date ? date_obj_to_str(d) : d)=>:date,Not([:season,:league_name,:league_num,:date,:HomeTeam,:AwayTeam]))
 	insertcols!(match_table,1,:id=>1:size(match_table,1))
 	
 	# Create the standings table
-	standings_table = select(standings_data,:season,:league_num=>:league_id,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:season,:league,:league_num,:espn_team_id,:team_name]))
+	standings_table = select(standings_data,:season,:league_num=>:league_id,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:season,:league_name,:league_num,:espn_team_id,:team_name]))
 
 	# Create the lineup table
 	lineup_table = select(lineup_data,:date=>ByRow(d->d isa Date ? date_obj_to_str(d) : d)=>:date,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:transfermarkt_team_id,:date,:team_name]))
@@ -383,12 +405,12 @@ function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, m
 	@assert 2*size(match_table,1)==size(lineup_table,1)
 
 	if csv_preview
-		CSV.write("csv_files/english_league_table_database.csv",league_table)
-		CSV.write("csv_files/english_team_table_database.csv",team_table)
-		CSV.write("csv_files/english_team_marketvalue_table_database.csv",team_marketvalue_table)
-		CSV.write("csv_files/english_match_table_database.csv",match_table)
-		CSV.write("csv_files/english_lineup_table_database.csv",lineup_table)
-		CSV.write("csv_files/english_standings_table_database.csv",standings_table)
+		CSV.write("csv_files/football_league_table_database.csv",league_table)
+		CSV.write("csv_files/football_team_table_database.csv",team_table)
+		CSV.write("csv_files/football_team_marketvalue_table_database.csv",team_marketvalue_table)
+		CSV.write("csv_files/football_match_table_database.csv",match_table)
+		CSV.write("csv_files/football_lineup_table_database.csv",lineup_table)
+		CSV.write("csv_files/football_standings_table_database.csv",standings_table)
 	end
 
 	SQLite.load!(league_table,db,"Leagues",ifnotexists=false)
@@ -446,6 +468,9 @@ if abspath(PROGRAM_FILE) == abspath(@__FILE__)
 		"--verbose"
 			help = "Verbose output (turns on debug logging)"
 			action = :store_true
+		"--download-only"
+			help = "Only attempt to download the webpages, nothing else"
+			action = :store_true
 	end
 
 	parsed_args = parse_args(s)
@@ -453,35 +478,42 @@ if abspath(PROGRAM_FILE) == abspath(@__FILE__)
 	if parsed_args["verbose"]
 		ENV["JULIA_DEBUG"] = Main
 	end
+	if parsed_args["download-only"]
+		parsed_args["disable-web-cache"] = parsed_args["check-csv-cache"] = parsed_args["use-csv-cache"] = false
+	end
 	global SCRAPE_YEAR_RANGE = parsed_args["start-at-season"]:parsed_args["end-at-season"]
 	m,M = minmax(parsed_args["http-delay-min"],parsed_args["http-delay-max"])
 	global SCRAPE_DELAY_RANGE = m:.1:M
 
 	function prepare_data(subject::String)::DataFrame
-		clean_data_path = "csv_files/english_$(subject)_data_clean.csv"
-		dirty_data_path = "csv_files/english_$(subject)_data_dirty.csv"
+		clean_data_path = "csv_files/football_$(subject)_data_clean.csv"
+		dirty_data_path = "csv_files/football_$(subject)_data_dirty.csv"
 		if parsed_args["check-csv-cache"] && isfile(clean_data_path)
 			data = CSV.read(clean_data_path,DataFrame)
 		else
 			if parsed_args["check-csv-cache"] && isfile(dirty_data_path)
 				data = CSV.read(dirty_data_path,DataFrame)
 			else
-				data = eval(Symbol("scrape_",subject,"_data"))(check_web_cache=!parsed_args["ignore-web-cache"],enable_web_cache=!parsed_args["disable-web-cache"])
+				data = eval(Symbol("scrape_",subject,"_data"))(check_web_cache=!parsed_args["ignore-web-cache"],
+					enable_web_cache=!parsed_args["disable-web-cache"],download_only=parsed_args["download-only"])
 				if parsed_args["use-csv-cache"]
 					CSV.write(dirty_data_path,data)
 				end
 			end
-			eval(Symbol("clean_",subject,"_data!"))(data)
-			if parsed_args["use-csv-cache"]
-				CSV.write(clean_data_path,data)
+			if !parsed_args["download-only"]
+				eval(Symbol("clean_",subject,"_data!"))(data)
+				if parsed_args["use-csv-cache"]
+					CSV.write(clean_data_path,data)
+				end
 			end
 		end
 		return data
 	end
 	
 	team_marketvalue_data,lineup_data,match_data,standings_data = prepare_data.(["team_marketvalue","lineup","match","standings"])
-
-	export_to_database("english_football_data.sqlite",team_marketvalue_data,lineup_data,match_data,standings_data,csv_preview=parsed_args["csv-preview"])
+	if !parsed_args["download-only"]
+		export_to_database("football_data.sqlite",team_marketvalue_data,lineup_data,match_data,standings_data,csv_preview=parsed_args["csv-preview"])
+	end
 else
 	@warn "This script was not meant to be imported. Proceed at your own risk!"
 end

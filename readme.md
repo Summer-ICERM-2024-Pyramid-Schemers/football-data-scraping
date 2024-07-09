@@ -1,8 +1,8 @@
-# EFL-data-scraping
+# football-data-scraping
 
-EFL-data-scraping is a project to scrape, clean, and compile data relating to the first 4 leagues in the English Football pyramid.
+football-data-scraping is a project to scrape, clean, and compile data relating to the first 4 leagues in the English Football pyramid and the first 2 German leagues.
 
-* fetch_english_football_data.jl is the main script and can handle all parts of the process.
+* fetch_football_data.jl is the main script and can handle all parts of the process.
 * collect_lineup_pages.jl is a helper script that can be run on other machines to download the large amounts of lineup pages from Transfermarkt.
 
 ## Installation
@@ -18,12 +18,11 @@ instantiate
 
 ## Usage
 
-Run `julia fetch_english_football_data.jl --help` for more in-depth information on command line arguments that can be used.
+Run `julia fetch_football_data.jl --help` for more in-depth information on command line arguments that can be used.
 
-* `julia fetch_english_football_data.jl`: run the process from almost scratch. By default, the script will attempt to read and write from the cache at "rawdata/"
-* `julia fetch_english_football_data.jl --ignore-web-cache --disable-web-cache`: run the process from scratch. This will take a long time.
+* `julia fetch_football_data.jl`: run the process from almost scratch. By default, the script will attempt to read and write from the cache at "rawdata/"
+* `julia fetch_football_data.jl --ignore-web-cache --disable-web-cache`: run the process from scratch. This will take a long time.
 
 ## TODO
 
 * Improve CSV cache to automatically remove csv files that do not match the year span, league span, etc
-* remove collect_lineup_pages.jl and make its functionality part of the main script using ArgParse commands
