@@ -26,11 +26,10 @@ const LEAGUES::Matrix{Any} = [1 "premier-league" "GB1" "E0" "ENG.1";
 								5 "bundesliga" "L1" "D1" "GER.1";
 								6 "2-bundesliga" "L2" "D2" "GER.2"]
 const MATCH_HEADERS_MAPPING::OrderedDict{Symbol,Symbol} = OrderedDict(:Date=>:date,:HomeTeam=>:HomeTeam,:AwayTeam=>:AwayTeam,:FTHG=>:fulltime_home_goals,
-	:FTAG=>:fulltime_away_goals,:FTR=>:fulltime_result,:HTHG=>:halftime_home_goals,:HTAG=>:halftime_away_goals,:HTR=>:halftime_result,:HS=>:home_shots,
-	:AS=>:away_shots,:HST=>:home_shots_on_target,:AST=>:away_shots_on_target,:HC=>:home_corners,:AC=>:away_corners,:HF=>:home_fouls,:AF=>:away_fouls,
-	:HY=>:home_yellow_cards,:AY=>:away_yellow_cards,:HR=>:home_red_cards,:AR=>:away_red_cards,:AvgH=>:market_average_home_win_odds,:AvgD=>:market_average_draw_odds,
-	:AvgA=>:market_average_away_win_odds)
+	:FTAG=>:fulltime_away_goals,:FTR=>:fulltime_result,:HTHG=>:halftime_home_goals,:HTAG=>:halftime_away_goals,:HTR=>:halftime_result,
+	:AvgH=>:market_average_home_win_odds,:AvgD=>:market_average_draw_odds,:AvgA=>:market_average_away_win_odds)
 const TEAM_ALIAS_DICT::Dict{String,String} = JSON.parsefile("team_alias_dict.json")
+TEAM_ALIAS_DICT_MODIFIED::Bool = false
 SCRAPE_YEAR_RANGE = 2010:2023
 SCRAPE_DELAY_RANGE = 1:.1:3
 
@@ -98,6 +97,7 @@ end
 function standardize_team_name(team_name::AbstractString)::AbstractString
 	team_name = String(strip(team_name))
 	return get!(TEAM_ALIAS_DICT,team_name) do
+		global TEAM_ALIAS_DICT_MODIFIED = true
 		println("Name \"$(team_name)\" not found!")
 		menu = TerminalMenus.RadioMenu(vcat(["(This is the standardized name)"],sort!(string.(unique(values(TEAM_ALIAS_DICT))),by=s->StringDistances.RatcliffObershelp()(team_name,s)),["(None of the above)"]))
 		idx = TerminalMenus.request("Select the standardized name",menu)
@@ -147,7 +147,7 @@ function scrape_team_marketvalue_data(; check_web_cache::Bool=true, enable_web_c
 	@info "Scraping team marketvalue data"
 	baseurl = "https://www.transfermarkt.us/{LEAGUE}/startseite/wettbewerb/{LEAGUE_ID}/plus/?saison_id={SEASON}"
 
-	df = DataFrame(season=Int[],league_name=String15[],league_num=Int[],transfermarkt_team_id=Int[],team_name=String31[],squad_size=Int[],avg_age=Float64[],num_foreigners=Int[],avg_market_val=String15[],total_market_val=String15[])
+	df = DataFrame(season=Int[],league_name=String15[],league_num=Int[],tmkt_team_id=Int[],team_name=String31[],squad_size=Int[],avg_age=Float64[],num_foreigners=Int[],avg_market_val=String15[],total_market_val=String15[])
 	
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
@@ -185,7 +185,7 @@ function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool
 	@info "Scraping lineup data"
 	baseurl = "https://www.transfermarkt.com/{LEAGUE}/gesamtspielplan/wettbewerb/{LEAGUE_ID}/saison_id/{SEASON}"
 
-	df = DataFrame(transfermarkt_team_id=Int[],team_name=String31[],date=String15[],starters_num_foreigners=Int[],starters_avg_age=Float64[],starters_purchase_val=String15[],
+	df = DataFrame(tmkt_team_id=Int[],team_name=String31[],date=String15[],starters_num_foreigners=Int[],starters_avg_age=Float64[],starters_purchase_val=String15[],
 		starters_total_market_val=String15[],bench_num_foreigners=Int[],bench_avg_age=Float64[],bench_purchase_val=String15[],bench_total_market_val=String15[],bench_size=Int[])
 	allowmissing!(df,r"starters|bench")
 	
@@ -244,6 +244,7 @@ function clean_lineup_data!(df::DataFrame)
 		:bench_purchase_val=>ByRow(parse_market_val),:bench_total_market_val=>ByRow(parse_market_val),renamecols=false)
 
 	# Date corrections
+	df[(df.date .== typeof(df[1,:date])("2011-01-18")) .&& ((df.team_name .== "Karlsruher") .|| (df.team_name .== "Greuther Fürth")),:date] = (df[1,:date] isa Date) ? [Date(2011,1,14),Date(2011,1,14)] : ["2011-01-14","2011-01-14"]
 	df[(df.date .== typeof(df[1,:date])("2019-12-07")) .&& ((df.team_name .== "Millwall") .|| (df.team_name .== "Nottingham Forest")),:date] = (df[1,:date] isa Date) ? [Date(2019,12,6),Date(2019,12,6)] : ["2019-12-06","2019-12-06"]
 	df[(df.date .== typeof(df[1,:date])("2021-12-18")) .&& ((df.team_name .== "Northampton Town") .|| (df.team_name .== "Barrow")),:date] = (df[1,:date] isa Date) ? [Date(2022,2,1),Date(2022,2,1)] : ["2022-02-01","2022-02-01"]
 	df[(df.date .== typeof(df[1,:date])("2021-12-18")) .&& ((df.team_name .== "Port Vale") .|| (df.team_name .== "Exeter City")),:date] = (df[1,:date] isa Date) ? [Date(2022,3,22),Date(2022,3,22)] : ["2022-03-22","2022-03-22"]
@@ -313,8 +314,8 @@ function clean_match_data!(df::DataFrame)
 	deleteat!(df,rows_to_delete)
 
 	# Correcting two rows that are only missing the fouls data
-	df[(df.Date .== typeof(df[1,:Date])("2017-04-22")) .&& (df.HomeTeam .== "Luton Town") .&& (df.AwayTeam .== "Notts County"),[:HF,:AF]] = [8 15]
-	df[(df.Date .== typeof(df[1,:Date])("2017-04-29")) .&& (df.HomeTeam .== "Cheltenham Town") .&& (df.AwayTeam .== "Hartlepool United"),[:HF,:AF]] = [13 14]
+	# df[(df.Date .== typeof(df[1,:Date])("2017-04-22")) .&& (df.HomeTeam .== "Luton Town") .&& (df.AwayTeam .== "Notts County"),[:HF,:AF]] = [8 15]
+	# df[(df.Date .== typeof(df[1,:Date])("2017-04-29")) .&& (df.HomeTeam .== "Cheltenham Town") .&& (df.AwayTeam .== "Hartlepool United"),[:HF,:AF]] = [13 14]
 	df[(df.Date .== typeof(df[1,:Date])("2019-08-31")) .&& (df.HomeTeam .== "Gillingham") .&& (df.AwayTeam .== "Bolton Wanderers"),[:AvgH,:AvgD,:AvgA]] = [1.12 6.5 15.5]
 	df[(df.Date .== typeof(df[1,:Date])("2019-11-16")) .&& (df.HomeTeam .== "Macclesfield Town") .&& (df.AwayTeam .== "Mansfield Town"),[:AvgH,:AvgD,:AvgA]] = [3.75 3.35 1.93]
 	df[(df.Date .== typeof(df[1,:Date])("2019-12-14")) .&& (df.HomeTeam .== "Walsall") .&& (df.AwayTeam .== "Macclesfield Town"),[:AvgH,:AvgD,:AvgA]] = [1.65 3.85 5.0]
@@ -375,13 +376,12 @@ function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, m
 	league_table = DataFrame(LEAGUES,[:id,:league_name,:tmkt_league_id,:fdcu_league_id,:espn_league_id])
 
 	# Create the team table from the team marketvalue data
-	team_table = outerjoin(unique!(select(team_marketvalue_data,[:team_name,:transfermarkt_team_id])),unique!(select(standings_data,[:team_name,:espn_team_id])),on=:team_name,validate=true=>true)
+	team_table = outerjoin(unique!(select(team_marketvalue_data,[:team_name,:tmkt_team_id])),unique!(select(standings_data,[:team_name,:espn_team_id])),on=:team_name,validate=true=>true)
 	insertcols!(team_table,1,:id=>1:size(team_table,1))
-	rename!(team_table,:team_name=>:name)
 
 	# Create the team marketvalue table from the data
-	team_name_to_id_dict = Dict([r.name=>r.id for r in eachrow(team_table)])
-	team_marketvalue_table = select(team_marketvalue_data,:season,:league_num=>:league_id,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:season,:league_name,:league_num,:transfermarkt_team_id,:team_name]))
+	team_name_to_id_dict = Dict([r.team_name=>r.id for r in eachrow(team_table)])
+	team_marketvalue_table = select(team_marketvalue_data,:season,:league_num=>:league_id,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:season,:league_name,:league_num,:tmkt_team_id,:team_name]))
 
 	# Create the match table from the data
 	match_table = select(match_data,:season,:league_num=>:league_id,:HomeTeam=>ByRow(k->team_name_to_id_dict[k])=>:home_team_id,:AwayTeam=>ByRow(k->team_name_to_id_dict[k])=>:away_team_id,
@@ -392,7 +392,7 @@ function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, m
 	standings_table = select(standings_data,:season,:league_num=>:league_id,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:season,:league_name,:league_num,:espn_team_id,:team_name]))
 
 	# Create the lineup table
-	lineup_table = select(lineup_data,:date=>ByRow(d->d isa Date ? date_obj_to_str(d) : d)=>:date,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:transfermarkt_team_id,:date,:team_name]))
+	lineup_table = select(lineup_data,:date=>ByRow(d->d isa Date ? date_obj_to_str(d) : d)=>:date,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:tmkt_team_id,:date,:team_name]))
 	insertcols!(lineup_table,1,:match_id=>Union{Int,Missing}[missing for _ = 1:size(lineup_table,1)])
 	for row in eachrow(lineup_table)
 		row.match_id = match_table[(match_table.date .== row.date) .&& ((match_table.home_team_id .== row.team_id) .|| (match_table.away_team_id .== row.team_id)),:id][1]
@@ -506,6 +506,11 @@ if abspath(PROGRAM_FILE) == abspath(@__FILE__)
 					CSV.write(clean_data_path,data)
 				end
 			end
+		end
+		if TEAM_ALIAS_DICT_MODIFIED
+			@debug "Saving the team alias dict"
+			save_alias_dict()
+			global TEAM_ALIAS_DICT_MODIFIED = false
 		end
 		return data
 	end

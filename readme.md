@@ -14,7 +14,7 @@ football-data-scraping is a project to scrape, clean, and compile data relating 
 ]activate .
 instantiate
 ```
-4. If you wish to use an existing snapshot of the webpages instead of downloading them, extract a snapshot from the "rawdata_snapshots/" folder into a folder named "rawdata/".
+4. If you wish to use an existing snapshot of the webpages instead of downloading them, install git-lfs (on Windows its `git lfs install`). Then download the large files; you may need to use the commands `git lfs fetch` or `git lfs checkout`. Then extract a snapshot from the "rawdata_snapshots/" folder into a folder named "rawdata/".
 
 ## Usage
 
