@@ -24,7 +24,9 @@ const LEAGUES::Matrix{Any} = [1 "premier-league" "GB1" "E0" "ENG.1";
 								3 "league-one" "GB3" "E2" "ENG.3";
 								4 "league-two" "GB4" "E3" "ENG.4";
 								5 "bundesliga" "L1" "D1" "GER.1";
-								6 "2-bundesliga" "L2" "D2" "GER.2"]
+								6 "2-bundesliga" "L2" "D2" "GER.2";
+								7 "scottish-premiership" "SC1" "SC0" "SCO.1";
+								8 "scottish-championship" "SC2" "SC1" "SCO.2"]
 const MATCH_HEADERS_MAPPING::OrderedDict{Symbol,Symbol} = OrderedDict(:Date=>:date,:HomeTeam=>:HomeTeam,:AwayTeam=>:AwayTeam,:FTHG=>:fulltime_home_goals,
 	:FTAG=>:fulltime_away_goals,:FTR=>:fulltime_result,:HTHG=>:halftime_home_goals,:HTAG=>:halftime_away_goals,:HTR=>:halftime_result,
 	:AvgH=>:market_average_home_win_odds,:AvgD=>:market_average_draw_odds,:AvgA=>:market_average_away_win_odds)
@@ -147,7 +149,7 @@ function scrape_team_marketvalue_data(; check_web_cache::Bool=true, enable_web_c
 	@info "Scraping team marketvalue data"
 	baseurl = "https://www.transfermarkt.us/{LEAGUE}/startseite/wettbewerb/{LEAGUE_ID}/plus/?saison_id={SEASON}"
 
-	df = DataFrame(season=Int[],league_name=String15[],league_num=Int[],tmkt_team_id=Int[],team_name=String31[],squad_size=Int[],avg_age=Float64[],num_foreigners=Int[],avg_market_val=String15[],total_market_val=String15[])
+	df = DataFrame(season=Int[],league_name=String31[],league_num=Int[],tmkt_team_id=Int[],team_name=String31[],squad_size=Int[],avg_age=Float64[],num_foreigners=Int[],avg_market_val=String15[],total_market_val=String15[])
 	
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
@@ -333,7 +335,7 @@ end
 function scrape_standings_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true, download_only::Bool=false)::DataFrame
 	@info "Scraping standings data"
 	baseurl = "https://www.espn.com/soccer/standings/_/league/{LEAGUE_ID}/season/{YEAR}"
-	df = DataFrame(season=Int[],league_name=String15[],league_num=Int[],ranking=Int[],espn_team_id=Int[],team_name=String31[],games_played=Int[],wins=Int[],draws=Int[],losses=Int[],goals_for=Int[],goals_against=Int[],goal_diff=Int[],points=Int[])
+	df = DataFrame(season=Int[],league_name=String31[],league_num=Int[],ranking=Int[],espn_team_id=Int[],team_name=String31[],games_played=Int[],wins=Int[],draws=Int[],losses=Int[],goals_for=Int[],goals_against=Int[],goal_diff=Int[],points=Int[])
 
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
@@ -451,11 +453,11 @@ if abspath(PROGRAM_FILE) == abspath(@__FILE__)
 		"--http-delay-min"
 			help = "Minimum amount of time to wait after a web request is made (seconds)"
 			arg_type = Float64
-			default = 1
+			default = first(SCRAPE_DELAY_RANGE)
 		"--http-delay-max"
 			help = "Maximum amount of time to wait after a web request is made (seconds)"
 			arg_type = Float64
-			default = 5
+			default = last(SCRAPE_DELAY_RANGE)
 		"--check-csv-cache"
 			help = "Use csv_files cache if available (may not reflect changes to this code)"
 			action = :store_true
