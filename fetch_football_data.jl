@@ -26,13 +26,15 @@ const LEAGUES::Matrix{Any} = [1 "premier-league" "GB1" "E0" "ENG.1";
 								5 "bundesliga" "L1" "D1" "GER.1";
 								6 "2-bundesliga" "L2" "D2" "GER.2";
 								7 "scottish-premiership" "SC1" "SC0" "SCO.1";
-								8 "scottish-championship" "SC2" "SC1" "SCO.2"]
+								8 "scottish-championship" "SC2" "SC1" "SCO.2";
+								9 "scottish-league-one" "SC3" "SC2" "SCO.3";
+								10 "scottish-league-two" "SC4" "SC3" "SCO.4"]
 const MATCH_HEADERS_MAPPING::OrderedDict{Symbol,Symbol} = OrderedDict(:Date=>:date,:HomeTeam=>:HomeTeam,:AwayTeam=>:AwayTeam,:FTHG=>:fulltime_home_goals,
 	:FTAG=>:fulltime_away_goals,:FTR=>:fulltime_result,:HTHG=>:halftime_home_goals,:HTAG=>:halftime_away_goals,:HTR=>:halftime_result,
 	:AvgH=>:market_average_home_win_odds,:AvgD=>:market_average_draw_odds,:AvgA=>:market_average_away_win_odds)
 const TEAM_ALIAS_DICT::Dict{String,String} = JSON.parsefile("team_alias_dict.json")
 TEAM_ALIAS_DICT_MODIFIED::Bool = false
-SCRAPE_YEAR_RANGE = 2010:2023
+SCRAPE_YEAR_RANGE = 2006:2023
 SCRAPE_DELAY_RANGE = 1:.1:3
 
 function get_raw_data_from(url::String; check_web_cache::Bool=true, enable_web_cache::Bool=true)::String
@@ -445,11 +447,11 @@ if abspath(PROGRAM_FILE) == abspath(@__FILE__)
 		"--start-at-season"
 			help = "Season to begin scraping from"
 			arg_type = Int
-			default = 2010
+			default = first(SCRAPE_YEAR_RANGE)
 		"--end-at-season"
 			help = "Season to end scraping at (inclusive)"
 			arg_type = Int
-			default = year(Dates.now())-1
+			default = last(SCRAPE_YEAR_RANGE)
 		"--http-delay-min"
 			help = "Minimum amount of time to wait after a web request is made (seconds)"
 			arg_type = Float64
