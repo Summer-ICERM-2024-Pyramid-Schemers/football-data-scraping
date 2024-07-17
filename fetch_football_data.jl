@@ -492,9 +492,10 @@ function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, m
 	assert_zero_missing_values(lineup_table)
 	assert_zero_missing_values(standings_table)
 
-	if 2*size(match_table,1)!=size(lineup_table,1)
+	matches_with_no_lineups = setdiff(match_table.id,lineup_table.match_id)
+	if !isempty(matches_with_no_lineups) || 2*size(match_table,1)!=size(lineup_table,1)
 		@error "Number of lineups and games do not match!" 2*size(match_table,1) size(lineup_table,1)
-		error("These games are missing lineups!:\n$(match_table[setdiff(match_table.id,lineup_table.match_id),:])\n$(team_table)")
+		error("These games are missing lineups!:\n$(match_table[matches_with_no_lineups,:])\n$(team_table)")
 	end
 
 	if csv_preview
