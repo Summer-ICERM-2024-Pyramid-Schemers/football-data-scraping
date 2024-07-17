@@ -18,23 +18,31 @@ if !isdir("csv_files")
 end
 
 const HTTP_REQUEST_HEADERS::Dict{String,String} = Dict("User-Agent"=>"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
-# Order is league_num, league_name, tmkt_league_id, fdcu_league_id, espn_league_id
-const LEAGUES::Matrix{Any} = [1 "premier-league" "GB1" "E0" "ENG.1";
-								2 "championship" "GB2" "E1" "ENG.2";
-								3 "league-one" "GB3" "E2" "ENG.3";
-								4 "league-two" "GB4" "E3" "ENG.4";
-								5 "bundesliga" "L1" "D1" "GER.1";
-								6 "2-bundesliga" "L2" "D2" "GER.2";
-								7 "scottish-premiership" "SC1" "SC0" "SCO.1";
-								8 "scottish-championship" "SC2" "SC1" "SCO.2";
-								9 "scottish-league-one" "SC3" "SC2" "SCO.3";
-								10 "scottish-league-two" "SC4" "SC3" "SCO.4"]
+# Order is league_num, league_name, tmkt_league_id, fdcu_league_id, espn_league_id, (team_marketvalue years, lineup years, match years, standings years)
+# By years (the last 4 columns, I mean which years are valid years to scrape the website in question)
+# The leagues that get put into the database should come first monotonically. If you add new leagues, you must follow the patterns and then modify the slice that occurs in the beginning of export_to_database()
+const LEAGUES::Matrix{Any} = [1 "premier-league" "GB1" "E0" "ENG.1" (1992:2024, 1992:2024, 2000:2024, 2003:2024);
+								2 "championship" "GB2" "E1" "ENG.2" (2004:2024, 2004:2024, 2000:2024, 2003:2024);
+								3 "league-one" "GB3" "E2" "ENG.3" (2004:2024, 2004:2024, 2000:2024, 2003:2024);
+								4 "league-two" "GB4" "E3" "ENG.4" (2004:2024, 2004:2024, 2000:2024, 2003:2024);
+								5 "bundesliga" "L1" "D1" "GER.1" (1963:2024, 1963:2024, 2000:2024, 2006:2024);
+								6 "2-bundesliga" "L2" "D2" "GER.2" (1981:2024, 1981:2024, 2000:2024, 2006:2024);
+								7 "scottish-premiership" "SC1" "SC0" "SCO.1" (1997:2024, 1997:2024, 2000:2024, 2003:2024);
+								8 "scottish-championship" "SC2" "SC1" "SCO.2" (1998:2024, 1998:2024, 2000:2024, 2003:2024);
+								9 "scottish-league-one" "SC3" "SC2" "SCO.3" (2000:2024, 2000:2024, 2000:2024, 2003:2024);
+								10 "scottish-league-two" "SC4" "SC3" "SCO.4" (2003:2024, 2003:2024, 2000:2024, 2003:2024);
+								7 "scottish-premiership-top-six-split" "SCPM" "" "" (1:0, vcat([2002],collect(2017:2024)), 1:0, 1:0);
+								7 "scottish-premiership-relegation-round" "SCPA" "" "" (1:0, vcat([2002],collect(2017:2024)), 1:0, 1:0);
+								9 "scottish-league-one-meisterrunde" "SC3M" "" "" (1:0, 2020:2020, 1:0, 1:0);
+								9 "scottish-league-one-abstiegsrunde" "SC3A" "" "" (1:0, 2020:2020, 1:0, 1:0);
+								10 "scottish-league-two-meisterrunde" "SC4M" "" "" (1:0, 2020:2020, 1:0, 1:0);
+								10 "scottish-league-two-abstiegsrunde" "SC4A" "" "" (1:0, 2020:2020, 1:0, 1:0)]
 const MATCH_HEADERS_MAPPING::OrderedDict{Symbol,Symbol} = OrderedDict(:Date=>:date,:HomeTeam=>:HomeTeam,:AwayTeam=>:AwayTeam,:FTHG=>:fulltime_home_goals,
 	:FTAG=>:fulltime_away_goals,:FTR=>:fulltime_result,:HTHG=>:halftime_home_goals,:HTAG=>:halftime_away_goals,:HTR=>:halftime_result,
 	:AvgH=>:market_average_home_win_odds,:AvgD=>:market_average_draw_odds,:AvgA=>:market_average_away_win_odds)
 const TEAM_ALIAS_DICT::Dict{String,String} = JSON.parsefile("team_alias_dict.json")
 TEAM_ALIAS_DICT_MODIFIED::Bool = false
-SCRAPE_YEAR_RANGE = 2006:2023
+SCRAPE_YEAR_RANGE = 2010:2023
 SCRAPE_DELAY_RANGE = 1:.1:3
 
 function get_raw_data_from(url::String; check_web_cache::Bool=true, enable_web_cache::Bool=true)::String
@@ -81,8 +89,12 @@ function remove_excess_html(str::String)::String
 	return read(buf,String)
 end
 
-function save_alias_dict()
-	write("team_alias_dict.json",JSON.json(TEAM_ALIAS_DICT,4))
+function save_alias_dict(;force::Bool=false)
+	if TEAM_ALIAS_DICT_MODIFIED || force
+		@debug "Saving the team alias dict"
+		write("team_alias_dict.json",JSON.json(TEAM_ALIAS_DICT,4))
+		global TEAM_ALIAS_DICT_MODIFIED = false
+	end
 end
 
 function date_obj_to_str(date_obj::Date)::String
@@ -103,7 +115,7 @@ function standardize_team_name(team_name::AbstractString)::AbstractString
 	return get!(TEAM_ALIAS_DICT,team_name) do
 		global TEAM_ALIAS_DICT_MODIFIED = true
 		println("Name \"$(team_name)\" not found!")
-		menu = TerminalMenus.RadioMenu(vcat(["(This is the standardized name)"],sort!(string.(unique(values(TEAM_ALIAS_DICT))),by=s->StringDistances.RatcliffObershelp()(team_name,s)),["(None of the above)"]))
+		menu = TerminalMenus.RadioMenu(vcat(["(This is the standardized name)"],sort!(unique(values(TEAM_ALIAS_DICT)),by=s->StringDistances.RatcliffObershelp()(team_name,s)),["(None of the above)"]))
 		idx = TerminalMenus.request("Select the standardized name",menu)
 		if idx == 1
 			return team_name
@@ -118,20 +130,22 @@ function standardize_team_name(team_name::AbstractString)::AbstractString
 	end
 end
 
-function assert_zero_missing_values(table::DataFrame)
-	rows_with_missings = filter(r->any(ismissing,collect(r)),eachrow(table))
-	if !isempty(rows_with_missings)
+function assert_zero_missing_values(df::DataFrame, cols=All())
+	complete_rows = completecases(df,cols)
+	if !all(complete_rows)
 		println("These rows have missing values!")
-		foreach(println,rows_with_missings)
+		println(df[.!complete_rows,All()])
 		error("You have missing values!")
 	end
 end
 
+
 # Market data functions
 
-function parse_market_val(str::AbstractString)::Float64
+function parse_market_val(str::AbstractString)::Union{Float64,Missing}
 	# Using list of pairs to ensure that the larger suffixes are tested first
 	if str == "-"
+		# If there is a hyphen, just assume that it means zero instead of missing for now
 		return 0.0
 	end
 	suffixes = ["bn"=>10^9,"k"=>10^3,"m"=>10^6,"b"=>10^9]
@@ -152,10 +166,14 @@ function scrape_team_marketvalue_data(; check_web_cache::Bool=true, enable_web_c
 	baseurl = "https://www.transfermarkt.us/{LEAGUE}/startseite/wettbewerb/{LEAGUE_ID}/plus/?saison_id={SEASON}"
 
 	df = DataFrame(season=Int[],league_name=String31[],league_num=Int[],tmkt_team_id=Int[],team_name=String31[],squad_size=Int[],avg_age=Float64[],num_foreigners=Int[],avg_market_val=String15[],total_market_val=String15[])
-	
+	allowmissing!(df,r"market_val")
+
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id,(valid_years,_,_,_)) in eachrow(LEAGUES)
+			if !in(season,valid_years)
+				continue
+			end
 			url = replace(baseurl,"{LEAGUE_ID}"=>tmkt_league_id,"{LEAGUE}"=>league_name,"{SEASON}"=>season)
 			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
 			if download_only
@@ -164,14 +182,20 @@ function scrape_team_marketvalue_data(; check_web_cache::Bool=true, enable_web_c
 			htmldata = parsehtml(data)
 			
 			for row in eachmatch(sel"div#yw1 table.items tbody tr",htmldata.root)
-				_,name_cell,squad_cell,avg_age_cell,foreigners_cell,avg_market_cell,total_market_cell = eachmatch(sel"td",row)
+				temp = eachmatch(sel"td",row)
+				if length(temp) == 7
+					_,name_cell,squad_cell,avg_age_cell,foreigners_cell,avg_market_cell,total_market_cell = temp
+					avg_market_val = avg_market_cell[1].text
+					total_market_val = total_market_cell[1][1].text
+				else
+					_,name_cell,squad_cell,avg_age_cell,foreigners_cell = temp
+					avg_market_val = total_market_val = missing
+				end
 				team_id = parse(Int,match(r"verein/(\d+)\b",getattr(name_cell[1],"href")).captures[1])
 				team_name = name_cell[1][1].text
 				squad_size = parse(Int,squad_cell[1][1].text)
 				avg_age = parse(Float64,avg_age_cell[1].text)
 				foreigners = parse(Int,foreigners_cell[1].text)
-				avg_market_val = avg_market_cell[1].text
-				total_market_val = total_market_cell[1][1].text
 				push!(df,[season,league_name,league_num,team_id,team_name,squad_size,avg_age,foreigners,avg_market_val,total_market_val])
 			end
 		end
@@ -182,26 +206,43 @@ end
 
 function clean_team_marketvalue_data!(df::DataFrame)
 	transform!(df,:avg_market_val=>ByRow(parse_market_val),:total_market_val=>ByRow(parse_market_val),:team_name=>ByRow(standardize_team_name),renamecols=false)
-	assert_zero_missing_values(df)
+	save_alias_dict()
+	assert_zero_missing_values(df,Not([:avg_market_val,:total_market_val]))
 end
 
 function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool=true, download_only::Bool=false)::DataFrame
 	@info "Scraping lineup data"
-	baseurl = "https://www.transfermarkt.com/{LEAGUE}/gesamtspielplan/wettbewerb/{LEAGUE_ID}/saison_id/{SEASON}"
+	baseurl1 = "https://www.transfermarkt.com/{LEAGUE}/gesamtspielplan/wettbewerb/{LEAGUE_ID}/saison_id/{SEASON}"
+	baseurl2 = "https://www.transfermarkt.com/{LEAGUE}/spieltag/wettbewerb/{LEAGUE_ID}/saison_id/{SEASON}"
 
 	df = DataFrame(tmkt_team_id=Int[],team_name=String31[],date=String15[],starters_num_foreigners=Int[],starters_avg_age=Float64[],starters_purchase_val=String15[],
 		starters_total_market_val=String15[],bench_num_foreigners=Int[],bench_avg_age=Float64[],bench_purchase_val=String15[],bench_total_market_val=String15[],bench_size=Int[])
 	allowmissing!(df,r"starters|bench")
+	scraped_game_ids = Set{Int32}()
 	
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
-			url = replace(baseurl,"{LEAGUE_ID}"=>tmkt_league_id,"{LEAGUE}"=>league_name,"{SEASON}"=>season)
-			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
-			htmldata = parsehtml(data)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id,(_,valid_years,_,_)) in eachrow(LEAGUES)
+			if !in(season,valid_years)
+				continue
+			end
+			url1 = replace(baseurl1,"{LEAGUE_ID}"=>tmkt_league_id,"{LEAGUE}"=>league_name,"{SEASON}"=>season)
+			data1 = get_raw_data_from(url1, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
+			htmldata1 = parsehtml(data1)
 			
-			for gamelink in eachmatch(sel"td.zentriert.hauptlink a",htmldata.root)
+			url2 = replace(baseurl2,"{LEAGUE_ID}"=>tmkt_league_id,"{LEAGUE}"=>league_name,"{SEASON}"=>season)
+			data2 = get_raw_data_from(url2, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
+			htmldata2 = parsehtml(data2)
+			
+			for gamelink in vcat(eachmatch(sel"td.zentriert.hauptlink a",htmldata1.root),eachmatch(sel"td.spieltagsansicht-ergebnis span a",htmldata2.root))
 				lineupurl = replace(getattr(gamelink,"href"),"/index/"=>"/aufstellung/")
+				val = parse(Int32,match(r"(\d+)$",lineupurl).captures[1])
+				if val in scraped_game_ids
+					continue
+				else
+					push!(scraped_game_ids,val)
+				end
+
 				if !startswith(lineupurl,"https")
 					lineupurl = "https://www.transfermarkt.com/"*lstrip(lineupurl,'/')
 				end
@@ -209,6 +250,7 @@ function scrape_lineup_data(; check_web_cache::Bool=true, enable_web_cache::Bool
 				if download_only
 					continue
 				end
+				
 				lineuphtml = parsehtml(lineuppage)
 				date_str = splitdir(getattr(Cascadia.matchFirst(sel"p.sb-datum > a:nth-of-type(2)",lineuphtml.root),"href"))[2]
 
@@ -246,22 +288,48 @@ end
 function clean_lineup_data!(df::DataFrame)
 	transform!(df,:team_name=>ByRow(standardize_team_name),:starters_purchase_val=>ByRow(parse_market_val),:starters_total_market_val=>ByRow(parse_market_val),
 		:bench_purchase_val=>ByRow(parse_market_val),:bench_total_market_val=>ByRow(parse_market_val),renamecols=false)
+	save_alias_dict()
 
 	# Date corrections
-	df[(df.date .== typeof(df[1,:date])("2011-01-18")) .&& ((df.team_name .== "Karlsruher") .|| (df.team_name .== "Greuther Fürth")),:date] = (df[1,:date] isa Date) ? [Date(2011,1,14),Date(2011,1,14)] : ["2011-01-14","2011-01-14"]
-	df[(df.date .== typeof(df[1,:date])("2019-12-07")) .&& ((df.team_name .== "Millwall") .|| (df.team_name .== "Nottingham Forest")),:date] = (df[1,:date] isa Date) ? [Date(2019,12,6),Date(2019,12,6)] : ["2019-12-06","2019-12-06"]
-	df[(df.date .== typeof(df[1,:date])("2021-12-18")) .&& ((df.team_name .== "Northampton Town") .|| (df.team_name .== "Barrow")),:date] = (df[1,:date] isa Date) ? [Date(2022,2,1),Date(2022,2,1)] : ["2022-02-01","2022-02-01"]
-	df[(df.date .== typeof(df[1,:date])("2021-12-18")) .&& ((df.team_name .== "Port Vale") .|| (df.team_name .== "Exeter City")),:date] = (df[1,:date] isa Date) ? [Date(2022,3,22),Date(2022,3,22)] : ["2022-03-22","2022-03-22"]
-	df[(df.date .== typeof(df[1,:date])("2022-04-30")) .&& ((df.team_name .== "Port Vale") .|| (df.team_name .== "Newport County")),:date] = (df[1,:date] isa Date) ? [Date(2022,5,2),Date(2022,5,2)] : ["2022-05-02","2022-05-02"]
-	df[(df.date .== typeof(df[1,:date])("2023-01-28")) .&& ((df.team_name .== "Luton Town") .|| (df.team_name .== "Cardiff City")),:date] = (df[1,:date] isa Date) ? [Date(2023,1,31),Date(2023,1,31)] : ["2023-01-31","2023-01-31"]
-	df[(df.date .== typeof(df[1,:date])("2022-10-01")) .&& ((df.team_name .== "Mansfield Town") .|| (df.team_name .== "Hartlepool United")),:date] = (df[1,:date] isa Date) ? [Date(2022,9,30),Date(2022,9,30)] : ["2022-09-30","2022-09-30"]
-	df[(df.date .== typeof(df[1,:date])("2023-03-21")) .&& ((df.team_name .== "Mansfield Town") .|| (df.team_name .== "Grimsby Town")),:date] = (df[1,:date] isa Date) ? [Date(2023,3,22),Date(2023,3,22)] : ["2023-03-22","2023-03-22"]
-	df[(df.date .== typeof(df[1,:date])("2023-09-09")) .&& ((df.team_name .== "Barrow") .|| (df.team_name .== "Morecambe")),:date] = (df[1,:date] isa Date) ? [Date(2023,10,31),Date(2023,10,31)] : ["2023-10-31","2023-10-31"]
-	df[(df.date .== typeof(df[1,:date])("2024-01-06")) .&& ((df.team_name .== "Gillingham") .|| (df.team_name .== "Stockport County")),:date] = (df[1,:date] isa Date) ? [Date(2024,2,20),Date(2024,2,20)] : ["2024-02-20","2024-02-20"]
-	
+	date_corrections = ["2010-02-01" "Airdrieonians" "Dumbarton" "2011-02-01";
+						"2010-12-07" "Peterhead" "Airdrieonians" "2010-12-14";
+						"2011-01-18" "Karlsruher" "Greuther Fürth" "2011-01-14";
+						"2011-05-07" "Kilmarnock" "Celtic" "2011-05-08";
+						"2011-08-06" "Aberdeen" "Celtic" "2011-08-07";
+						"2015-01-31" "Partick Thistle" "St. Mirren" "2015-01-30";
+						"2015-11-14" "Hibernian" "Livingston" "2015-11-17";
+						"2019-03-23" "Queen of the South" "Falkirk" "2019-04-02";
+						"2019-12-07" "Millwall" "Nottingham Forest" "2019-12-06";
+						"2020-08-08" "Rangers" "St. Mirren" "2020-08-09";
+						"2021-12-18" "Northampton Town" "Barrow" "2022-02-01";
+						"2021-12-18" "Port Vale" "Exeter City" "2022-03-22";
+						"2022-04-30" "Port Vale" "Newport County" "2022-05-02";
+						"2023-01-28" "Luton Town" "Cardiff City" "2023-01-31";
+						"2022-10-01" "Mansfield Town" "Hartlepool United" "2022-09-30";
+						"2023-01-07" "Dundee United" "Rangers" "2023-01-08";
+						"2023-03-18" "Arbroath" "Greenock Morton" "2023-03-17";
+						"2023-03-21" "Mansfield Town" "Grimsby Town" "2023-03-22";
+						"2023-03-25" "Inverness Caledonian Thistle" "Partick Thistle" "2023-03-24";
+						"2023-04-01" "Arbroath" "Ayr United" "2023-03-31";
+						"2023-04-08" "Dundee United" "Hibernian" "2023-04-09";
+						"2023-04-22" "Ayr United" "Queen's Park" "2023-04-21";
+						"2023-09-09" "Barrow" "Morecambe" "2023-10-31";
+						"2023-09-23" "Rangers" "Motherwell" "2023-09-24";
+						"2023-09-23" "Aberdeen" "Ross County" "2023-09-24";
+						"2023-10-07" "St. Mirren" "Rangers" "2023-10-08";
+						"2023-10-07" "Dundee" "Ross County" "2023-10-24";
+						"2023-10-07" "Aberdeen" "St. Johnstone" "2023-10-08";
+						"2024-01-06" "Gillingham" "Stockport County" "2024-02-20"]
+	for (baddate_str,home_team_name,away_team_name,newdate_str) in eachrow(date_corrections)
+		df[(df.date .== typeof(df[1,:date])(baddate_str)) .&& ((df.team_name .== home_team_name) .|| (df.team_name .== away_team_name)),:date] = repeat([typeof(df[1,:date])(newdate_str)],2)
+	end
+
 	# Fix the missing data in the Southend vs Stevenage
 	df[(df.date .== typeof(df[1,:date])("2021-03-13")) .&& (df.team_name .== "Southend United"),Between(:starters_num_foreigners,:bench_size)] = [7 25.4 0 750000.0 1 25.0 0 0.0 7]
 	df[(df.date .== typeof(df[1,:date])("2021-03-13")) .&& (df.team_name .== "Stevenage"),Between(:starters_num_foreigners,:bench_size)] = [4 26.5 0 1200000.0 1 25.9 0 500000.0 7]
+	# Fix the missing data in the Berwick Rangers vs Stenhousemuir
+	df[(df.date .== typeof(df[1,:date])("2018-04-24")) .&& (df.team_name .== "Berwick Rangers"),Between(:starters_num_foreigners,:bench_size)] = [0 23.4 0 0 0 23.9 0 0 7]
+	df[(df.date .== typeof(df[1,:date])("2018-04-24")) .&& (df.team_name .== "Stenhousemuir"),Between(:starters_num_foreigners,:bench_size)] = [1 26.5 0 0 0 24.8 0 0 4]
 
 	rows_to_delete = findall((df.date .== typeof(df[1,:date])("2019-04-27")) .&& ((df.team_name .== "Bolton Wanderers") .|| (df.team_name .== "Brentford")))
 	@assert length(rows_to_delete)==2
@@ -269,6 +337,7 @@ function clean_lineup_data!(df::DataFrame)
 
 	assert_zero_missing_values(df)
 end
+
 
 # Match data functions
 
@@ -281,7 +350,10 @@ function scrape_match_data(; check_web_cache::Bool=true, enable_web_cache::Bool=
 
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id,(_,_,valid_years,_)) in eachrow(LEAGUES)
+			if !in(season,valid_years)
+				continue
+			end
 			url = replace(baseurl,"{SEASON}"=>string(season%100,pad=2)*string((season+1)%100,pad=2),"{LEAGUE_ID}"=>fdcu_league_id)
 			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
 			if download_only
@@ -312,14 +384,17 @@ end
 
 function clean_match_data!(df::DataFrame)
 	transform!(df,:Date=>ByRow(standardize_date),:HomeTeam=>ByRow(standardize_team_name),:AwayTeam=>ByRow(standardize_team_name),renamecols=false)
+	save_alias_dict()
 
 	rows_to_delete = findall((df.Date .== typeof(df[1,:Date])("2019-04-27")) .&& (df.HomeTeam .== "Bolton Wanderers") .&& (df.AwayTeam .== "Brentford"))
 	@assert length(rows_to_delete)==1
 	deleteat!(df,rows_to_delete)
 
 	# Correcting two rows that are only missing the fouls data
-	# df[(df.Date .== typeof(df[1,:Date])("2017-04-22")) .&& (df.HomeTeam .== "Luton Town") .&& (df.AwayTeam .== "Notts County"),[:HF,:AF]] = [8 15]
-	# df[(df.Date .== typeof(df[1,:Date])("2017-04-29")) .&& (df.HomeTeam .== "Cheltenham Town") .&& (df.AwayTeam .== "Hartlepool United"),[:HF,:AF]] = [13 14]
+	if :HF in propertynames(df)
+		df[(df.Date .== typeof(df[1,:Date])("2017-04-22")) .&& (df.HomeTeam .== "Luton Town") .&& (df.AwayTeam .== "Notts County"),[:HF,:AF]] = [8 15]
+		df[(df.Date .== typeof(df[1,:Date])("2017-04-29")) .&& (df.HomeTeam .== "Cheltenham Town") .&& (df.AwayTeam .== "Hartlepool United"),[:HF,:AF]] = [13 14]
+	end
 	df[(df.Date .== typeof(df[1,:Date])("2019-08-31")) .&& (df.HomeTeam .== "Gillingham") .&& (df.AwayTeam .== "Bolton Wanderers"),[:AvgH,:AvgD,:AvgA]] = [1.12 6.5 15.5]
 	df[(df.Date .== typeof(df[1,:Date])("2019-11-16")) .&& (df.HomeTeam .== "Macclesfield Town") .&& (df.AwayTeam .== "Mansfield Town"),[:AvgH,:AvgD,:AvgA]] = [3.75 3.35 1.93]
 	df[(df.Date .== typeof(df[1,:Date])("2019-12-14")) .&& (df.HomeTeam .== "Walsall") .&& (df.AwayTeam .== "Macclesfield Town"),[:AvgH,:AvgD,:AvgA]] = [1.65 3.85 5.0]
@@ -341,7 +416,10 @@ function scrape_standings_data(; check_web_cache::Bool=true, enable_web_cache::B
 
 	for season = SCRAPE_YEAR_RANGE
 		@debug "Scraping season $(season)"
-		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id) in eachrow(LEAGUES)
+		for (league_num,league_name,tmkt_league_id,fdcu_league_id,espn_league_id,(_,_,_,valid_years)) in eachrow(LEAGUES)
+			if !in(season,valid_years)
+				continue
+			end
 			url = replace(baseurl,"{LEAGUE_ID}"=>espn_league_id,"{YEAR}"=>season)
 			data = get_raw_data_from(url, check_web_cache=check_web_cache, enable_web_cache=enable_web_cache)
 			if download_only
@@ -369,6 +447,7 @@ end
 
 function clean_standings_data!(df::DataFrame)
 	transform!(df,:team_name=>ByRow(standardize_team_name),renamecols=false)
+	save_alias_dict()
 	assert_zero_missing_values(df)
 end
 
@@ -377,7 +456,7 @@ end
 
 function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, match_data, standings_data; csv_preview::Bool=false)
 	# Create the league table (essentially an enum)
-	league_table = DataFrame(LEAGUES,[:id,:league_name,:tmkt_league_id,:fdcu_league_id,:espn_league_id])
+	league_table = DataFrame(LEAGUES[1:10,1:5],[:id,:league_name,:tmkt_league_id,:fdcu_league_id,:espn_league_id])
 
 	# Create the team table from the team marketvalue data
 	team_table = outerjoin(unique!(select(team_marketvalue_data,[:team_name,:tmkt_team_id])),unique!(select(standings_data,[:team_name,:espn_team_id])),on=:team_name,validate=true=>true)
@@ -398,15 +477,25 @@ function export_to_database(db::SQLite.DB, team_marketvalue_data, lineup_data, m
 	# Create the lineup table
 	lineup_table = select(lineup_data,:date=>ByRow(d->d isa Date ? date_obj_to_str(d) : d)=>:date,:team_name=>ByRow(k->team_name_to_id_dict[k])=>:team_id,Not([:tmkt_team_id,:date,:team_name]))
 	insertcols!(lineup_table,1,:match_id=>Union{Int,Missing}[missing for _ = 1:size(lineup_table,1)])
+	grouped_match_table = groupby(match_table,:date)
 	for row in eachrow(lineup_table)
-		row.match_id = match_table[(match_table.date .== row.date) .&& ((match_table.home_team_id .== row.team_id) .|| (match_table.away_team_id .== row.team_id)),:id][1]
+		subtable = grouped_match_table[(date=row.date,)]
+		row.match_id = subtable[(subtable.home_team_id .== row.team_id) .|| (subtable.away_team_id .== row.team_id),:id][1]
 	end
 	select!(lineup_table,Not(:date))
 
 	# Verify that the tables are not missing values
-	foreach(assert_zero_missing_values,(league_table,team_table,team_marketvalue_table,match_table,lineup_table,standings_table))
+	assert_zero_missing_values(league_table)
+	assert_zero_missing_values(team_table)
+	assert_zero_missing_values(team_marketvalue_table,Not([:avg_market_val,:total_market_val]))
+	assert_zero_missing_values(match_table)
+	assert_zero_missing_values(lineup_table)
+	assert_zero_missing_values(standings_table)
 
-	@assert 2*size(match_table,1)==size(lineup_table,1)
+	if 2*size(match_table,1)!=size(lineup_table,1)
+		@error "Number of lineups and games do not match!" 2*size(match_table,1) size(lineup_table,1)
+		error("These games are missing lineups!:\n$(match_table[setdiff(match_table.id,lineup_table.match_id),:])\n$(team_table)")
+	end
 
 	if csv_preview
 		CSV.write("csv_files/football_league_table_database.csv",league_table)
@@ -510,11 +599,6 @@ if abspath(PROGRAM_FILE) == abspath(@__FILE__)
 					CSV.write(clean_data_path,data)
 				end
 			end
-		end
-		if TEAM_ALIAS_DICT_MODIFIED
-			@debug "Saving the team alias dict"
-			save_alias_dict()
-			global TEAM_ALIAS_DICT_MODIFIED = false
 		end
 		return data
 	end
