@@ -26,16 +26,17 @@ function create_summaries(table::AbstractDataFrame, cols)
     
     table[!,:country] = table[!,:league_id] .|> (x-> x<=4 ? "eng" : x<=6 ? "ger" : "sco")
     for sdf in groupby(table,:country)
-        _describe_and_format(sdf, cols, csv_filename="csv_files/summary_$(lowercase(sdf[1,:country])).csv")
+        _describe_and_format(sdf, cols, csv_filename="csv_files/summary_$(sdf[1,:country]).csv")
+    end
+    for sdf in groupby(table,:league_id)
+        _describe_and_format(sdf, cols, csv_filename="csv_files/summary_$(sdf[1,:league_id]).csv")
     end
 end
 
 
 # Runner script
 
-for fn in ("csv_files/summary_all.csv","csv_files/summary_eng.csv","csv_files/summary_ger.csv","csv_files/summary_sco.csv")
-    isfile(fn) && rm(fn)
-end
+foreach(fn->rm(joinpath("csv_files",fn)),filter!(startswith("summary_"),readdir("csv_files",sort=false)))
 
 disable_sigint() do
     db = SQLite.DB("football_data.sqlite")
