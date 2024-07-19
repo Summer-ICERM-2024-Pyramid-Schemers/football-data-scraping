@@ -1,9 +1,7 @@
 # football-data-scraping
 
 football-data-scraping is a project to scrape, clean, and compile data relating to the first 4 leagues in the English Football pyramid and the first 2 German leagues.
-
-* fetch_football_data.jl is the main script and can handle all parts of the process.
-* collect_lineup_pages.jl is a helper script that can be run on other machines to download the large amounts of lineup pages from Transfermarkt.
+fetch_football_data.jl is the main script and can handle all parts of the process. It now also has a command line option that ignores the scraping and cleaning process and just works on downloading pages, which is useful for running on a raspberry pi.
 
 ## Installation
 
@@ -21,8 +19,6 @@ instantiate
 Run `julia fetch_football_data.jl --help` for more in-depth information on command line arguments that can be used.
 
 * `julia fetch_football_data.jl`: run the process from almost scratch. By default, the script will attempt to read and write from the cache at "rawdata/"
-* `julia fetch_football_data.jl --ignore-web-cache --disable-web-cache`: run the process from scratch. This will take a long time.
-
-## TODO
-
-* Improve CSV cache to automatically remove csv files that do not match the year span, league span, etc
+* `julia fetch_football_data.jl --ignore-web-cache --disable-web-cache`: run the process from scratch. This will take a *long* time
+* `julia fetch_football_data.jl --use-csv-cache`: run the process and create csv files after the scraping and cleaning steps. The csv files can be used to hunt down issues and to speed up the process next time
+* `julia fetch_football_data.jl --check-csv-cache`: look for intermediate csv files and use them if found. This can be used to skip a very long scraping process (if nothing should have changed) and skip to the cleaning or exporting step
