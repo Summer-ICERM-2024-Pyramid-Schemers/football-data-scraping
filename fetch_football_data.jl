@@ -791,7 +791,7 @@ if abspath(PROGRAM_FILE) == abspath(@__FILE__)
 	
 	team_marketvalue_data,lineup_data,match_data,standings_data = prepare_data.(["team_marketvalue","lineup","match","standings"])
 	if !parsed_args["download-only"]
-		export_to_database("football_data.sqlite",team_marketvalue_data,lineup_data,match_data,standings_data,csv_preview=parsed_args["csv-preview"])
+		export_to_database("football_data.sqlite",team_marketvalue_data,lineup_data,match_data,standings_data,csv_preview=parsed_args["csv-preview"],truncate=true)
 	end
 else
 	@warn "This script was not meant to be imported. Proceed at your own risk!"
