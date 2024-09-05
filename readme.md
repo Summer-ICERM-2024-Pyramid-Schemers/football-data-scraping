@@ -2,7 +2,7 @@
 
 football-data-scraping is a project to scrape, clean, and compile data relating to the top 4 leagues in the English Football pyramid, the top 2 German leagues, and the top 4 Scottish leagues. The data is pulled from ESPN, football-data.co.uk, and Transfermarkt.
 
-fetch_football_data.jl is the main script and can handle all parts of the process. It now also has a command line option that ignores the scraping and cleaning process and just works on downloading pages, which is useful for running on a raspberry pi.
+fetch_football_data.jl is the main script and can handle all parts of the process. It now has a command line option that ignores the scraping and cleaning process and just works on downloading pages, which is useful for running on a raspberry pi.
 
 ## Installation
 
@@ -19,7 +19,6 @@ instantiate
 
 Run `julia fetch_football_data.jl --help` for more in-depth information on command line arguments that can be used.
 
-
 Passing command line flags to "fetch_football_data.jl" changes what the script does or what it outputs. Here are a few examples:
 * `julia fetch_football_data.jl`: run the process from almost scratch. By default, the script will attempt to read and write from the web cache at "rawdata/".
 * `julia fetch_football_data.jl --ignore-web-cache --disable-web-cache`: run the process from scratch. This will involve fetching all pages from the web, which will take a *long* time.
@@ -31,7 +30,7 @@ Passing command line flags to "fetch_football_data.jl" changes what the script d
 ### Program constants and globals
 
 - `HTTP_REQUEST_HEADERS`: Headers to pass to the HTTP request. This is used to reduce the chance of the scraper getting blocked.
-- `LEAGUES`: A matrix of data that determines how the scraper works. The reason this is so complicated because of Transfermarkt and Scotland. By column...
+- `LEAGUES`: A matrix of data that determines how the scraper works. The reason this is so complicated is because of Transfermarkt and Scotland. By column...
     1. The first column is the league id. League ids must go from 1,2,...,N, which must reside in the first N rows of the matrix.
     2. The second column is the name of the league (according to Transfermarkt).
     3. The third column is the Transfermarkt league id.
@@ -53,13 +52,13 @@ If you wish to extent this program and scrape more subjects, make sure your func
 ### Web requests and rawdata cache
 
 Scraping all this data requires scraping tens of thousands of webpages.
-To reduce the chance of getting rate limited and be respectful, the program waits some time after a request is made.
+To reduce the chance of getting rate limited and in order to be respectful, the program waits some time after a request is made.
 However, this means that scraping will take hours to days to complete.
 Instead, the program will save the reponses to the rawdata folder so that future scraping attempts can save time by opening the files locally.
-I am aware that opening thousands of files is not a perfect solution, but restructuring the existing cache into another database or concatenating them seems to be more trouble than it's worth.
+We are aware that opening thousands of files is not a perfect solution, but restructuring the existing cache into another database or concatenating them seems to be more trouble than it's worth.
 
 Each file in the rawdata folder is a response from the web. If the response was not a csv file, the program assumes it is a webpage and attempts to strip all "script" tags from the page to reduce file size (this occurs before saving the file).
-The name of each file is the md5 hash of the url it was located at. I could have made a subfolders for each site that clearly organize the pages; I chose the md5 approach to avoid needing to respect different nontrivial folder hierarchies per site in code.
+The name of each file is the md5 hash of the url it was located at. We could have made a subfolder for each site and organized the pages that way; We chose the md5 approach because it was simpler to use in code and did not require further planning.
 If the program crashes in the scraping phase, turn on verbose output and look for which page caused the crash. Verbose output will list which url it attempted to grab (and its md5 hash).
 
 
