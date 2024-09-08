@@ -13,7 +13,7 @@ fetch_football_data.jl is the main script and can handle all parts of the proces
 ]activate .
 instantiate
 ```
-4. If you wish to use an existing snapshot of the webpages instead of downloading them, install git-lfs (on Windows it's `git lfs install`). Then download the large files; you may need to use the commands `git lfs fetch` or `git lfs checkout`. Then extract a snapshot from the "rawdata_snapshots/" folder into a folder named "rawdata/".
+4. If you wish to use an existing snapshot of the webpages instead of downloading them, extract a snapshot from the "rawdata_snapshots/" folder into a folder named "rawdata/". This may require installing git-lfs.
 
 ## Usage
 
