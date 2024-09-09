@@ -54,7 +54,7 @@ If you wish to extent this program and scrape more subjects, make sure your func
 Scraping all this data requires scraping tens of thousands of webpages.
 To reduce the chance of getting rate limited and in order to be respectful, the program waits some time after a request is made.
 However, this means that scraping will take hours to days to complete.
-Instead, the program will save the reponses to the rawdata folder so that future scraping attempts can save time by opening the files locally.
+Instead, the program will save the responses to the rawdata folder so that future scraping attempts can save time by opening the files locally.
 We are aware that opening thousands of files is not a perfect solution, but restructuring the existing cache into another database or concatenating them seems to be more trouble than it's worth.
 
 Each file in the rawdata folder is a response from the web. If the response was not a csv file, the program assumes it is a webpage and attempts to strip all "script" tags from the page to reduce file size (this occurs before saving the file).
