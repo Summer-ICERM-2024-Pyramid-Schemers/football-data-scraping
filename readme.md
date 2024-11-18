@@ -31,7 +31,7 @@ Passing command line flags to "fetch_football_data.jl" changes what the script d
 
 - `HTTP_REQUEST_HEADERS`: Headers to pass to the HTTP request. This is used to reduce the chance of the scraper getting blocked.
 - `LEAGUES`: A matrix of data that determines how the scraper works. The reason this is so complicated is because of Transfermarkt and Scotland. By column...
-    1. The first column is the league id. League ids must go from 1,2,...,N, which must reside in the first N rows of the matrix.
+    1. The first column is the league id. League ids must go from 1,2,...,N, which must reside in the first N rows of the matrix. Remaining rows should reuse one of the league ids above, which will insert the data from this new "league" into the original league (this is what we must do for the Scottish data).
     2. The second column is the name of the league (according to Transfermarkt).
     3. The third column is the Transfermarkt league id.
     4. The fourth column is the football-data.co.uk league id.
@@ -39,9 +39,9 @@ Passing command line flags to "fetch_football_data.jl" changes what the script d
     6. The last column is a tuple of iterables with one item for each subject. Each item in the tuple specifies the years that this league can be scraped for that subject. Currently, the list of subjects is (team_marketvalue, lineup, match, standings).
 - `MATCH_HEADERS_MAPPING`: Which columns to select from the match csv files and what each column should be renamed to.
 - `TEAM_ALIAS_DICT`: Dict of team names to their standardized form. If `s`=>`s` exists in the dictionary, then `s` is a standardized team name. While the Dict reference cannot be changed, the keys and values can. If a team name doesn't exist, the program will block and prompt the user to resolve the issue.
-- `TEAM_ALIAS_DICT_MODIFIED`: Global flag variable that stores whether `TEAM_ALIAS_DICT` has been changed (by the user prompt). Calling `save_alias_dict` will save the dictionary if this flag is set (and then reset this flag).
-- `SCRAPE_YEAR_RANGE`: Default range of years to scrape. It can be overridden using the command line flags.
-- `SCRAPE_DELAY_RANGE`: Default range of time to wait after making a web request. It can be overridden using the command line flags.
+- `TEAM_ALIAS_DICT_MODIFIED`: Global flag that stores whether `TEAM_ALIAS_DICT` has been changed (by the user prompt). Calling `save_alias_dict` will save the dictionary if this flag is set (and then reset it).
+- `SCRAPE_YEAR_RANGE`: Default range of years to scrape. It can be overridden using the command line arguments.
+- `SCRAPE_DELAY_RANGE`: Default range of time to wait after making a web request. It can be overridden using command line arguments.
 
 ### Function names
 
